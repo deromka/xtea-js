@@ -1,5 +1,3 @@
-var Buffer = require('buffer').Buffer;
-
 var ROUNDS = 32;
 var DELTA = 0x9E3779B9;
 
@@ -57,22 +55,53 @@ function decipher_cbc( v, k, iv ) {
   iv[1] = tmp[1];
 }
 
+function uint32_to_uint8_big_endian( num ) {
+  const out = new Uint8Array(4);
+
+  // big endian
+  out[3] = 0xFF & num
+  out[2] = 0xFF & (num >> 8)
+  out[1] = 0xFF & (num >> 16)
+  out[0] = 0xFF & (num >> 24)
+
+  return out
+}
+
+function uint8_arr_to_uint32_big_endian( arr ) {
+  const dv = new DataView(arr);
+  return dv.getUint32(0, false)
+}
+
+function concat_arrays( a, b ) {
+  const out = new Uint8Array( a.length + b.length )
+  out.set(a)
+  out.set(b, a.length)
+
+  return out
+}
+
 /** @private */
 function doBlock( method, block ,key ) {
   var k = new Uint32Array(4);
   var v = new Uint32Array(2);
-  var out = new Buffer(8);
+  var out = new Uint8Array(8);
 
   for (var i = 0; i < 4; ++i) {
-    k[i] = key.readUInt32BE(i * 4);
+    //k[i] = key.readUInt32BE(i * 4);
+    k[i] = uint8_arr_to_uint32_big_endian(key.buffer.slice(i*4, (i*4)+4))
   }
-  v[0] = block.readUInt32BE(0);
-  v[1] = block.readUInt32BE(4);
+  //v[0] = block.readUInt32BE(0);
+  //v[1] = block.readUInt32BE(4);
+  v[0] = uint8_arr_to_uint32_big_endian(block.buffer.slice(0, 4))
+  v[1] = uint8_arr_to_uint32_big_endian(block.buffer.slice(4, 8))
 
   method( v, k );
 
-  out.writeUInt32BE(v[0], 0);
-  out.writeUInt32BE(v[1], 4);
+  //out.writeUInt32BE(v[0], 0);
+  //out.writeUInt32BE(v[1], 4);
+
+  out.set(uint32_to_uint8_big_endian(v[0]), 0)
+  out.set(uint32_to_uint8_big_endian(v[1]), 4)
 
   return out
 }
@@ -86,7 +115,7 @@ var MODES = {
 function doBlocks( encryption, msg, key, mode, ivbuf, skippad ) {
   mode = mode || 'ecb';
   if (!ivbuf) {
-    ivbuf = new Buffer(8);
+    ivbuf = new Uint8Array(8);
     ivbuf.fill(0);
   }
 
@@ -112,16 +141,19 @@ function doBlocks( encryption, msg, key, mode, ivbuf, skippad ) {
     pad = 0;
   }
 
-  var out = new Buffer(length + pad);
+  var out = new Uint8Array(length + pad);
   var k = new Uint32Array(4);
   var v = new Uint32Array(2);
   var iv = new Uint32Array(2);
 
-  iv[0] = ivbuf.readUInt32BE(0);
-  iv[1] = ivbuf.readUInt32BE(4);
+  //iv[0] = ivbuf.readUInt32BE(0);
+  //iv[1] = ivbuf.readUInt32BE(4);
+  iv[0] = uint8_arr_to_uint32_big_endian(ivbuf.buffer.slice(0, 4))
+  iv[1] = uint8_arr_to_uint32_big_endian(ivbuf.buffer.slice(4, 8))
 
   for (var i = 0; i < 4; ++i) {
-    k[i] = key.readUInt32BE(i * 4);
+    //k[i] = key.readUInt32BE(i * 4);
+    k[i] = uint8_arr_to_uint32_big_endian(key.buffer.slice(i*4, (i*4)+4))
   }
 
   var offset = 0;
@@ -131,21 +163,24 @@ function doBlocks( encryption, msg, key, mode, ivbuf, skippad ) {
         break;
       }
 
-      var buf = new Buffer( pad );
+      var buf = new Uint8Array( pad );
       buf.fill( pad );
 
-      buf = Buffer.concat([ msg.slice( offset ), buf ]);
-      v[0] = buf.readUInt32BE( 0 );
-      v[1] = buf.readUInt32BE( 4 );
+      buf = concat_arrays(msg.slice( offset ), buf );
+      v[0] = uint8_arr_to_uint32_big_endian(buf.buffer.slice(0, 4));
+      v[1] = uint8_arr_to_uint32_big_endian(buf.buffer.slice(4, 8));
     } else {
-      v[0] = msg.readUInt32BE( offset );
-      v[1] = msg.readUInt32BE( offset + 4 );
+      v[0] = uint8_arr_to_uint32_big_endian(msg.buffer.slice(offset, offset + 4));
+      v[1] = uint8_arr_to_uint32_big_endian(msg.buffer.slice( offset + 4, offset + 8 ));
     }
 
     method( v, k, iv );
 
-    out.writeUInt32BE( v[0], offset );
-    out.writeUInt32BE( v[1], offset + 4 );
+    //out.writeUInt32BE( v[0], offset );
+    //out.writeUInt32BE( v[1], offset + 4 );
+    out.set(uint32_to_uint8_big_endian(v[0]), offset)
+    out.set(uint32_to_uint8_big_endian(v[1]), offset + 4)
+
     offset += 8;
   }
 
@@ -159,9 +194,9 @@ function doBlocks( encryption, msg, key, mode, ivbuf, skippad ) {
 /**
  * Encrypts single block of data using XTEA cipher.
  *
- * @param {Buffer} block  64-bit (8-bytes) block of data to encrypt
- * @param {Buffer} key    128-bit (16-bytes) encryption key
- * @returns {Buffer}  64-bit of encrypted block
+ * @param {Uint8Array} block  64-bit (8-bytes) block of data to encrypt
+ * @param {Uint8Array} key    128-bit (16-bytes) encryption key
+ * @returns {Uint8Array}  64-bit of encrypted block
  */
 function encryptBlock( block, key ) {
   return doBlock( encipher, block, key );
@@ -170,9 +205,9 @@ function encryptBlock( block, key ) {
 /**
  * Decrypts single block of data using XTEA cipher.
  *
- * @param {Buffer} block  64-bit (8-bytes) block of data to encrypt
- * @param {Buffer} key    128-bit (16-bytes) encryption key
- * @returns {Buffer}  64-bit of encrypted block
+ * @param {Uint8Array} block  64-bit (8-bytes) block of data to encrypt
+ * @param {Uint8Array} key    128-bit (16-bytes) encryption key
+ * @returns {Uint8Array}  64-bit of encrypted block
  */
 function decryptBlock( block, key ) {
   return doBlock( decipher, block, key );
@@ -182,12 +217,12 @@ function decryptBlock( block, key ) {
  * Encrypts data using XTEA cipher using specified block cipher mode of operation
  * and PKCS#7 padding.
  *
- * @param {Buffer} msg  Message to encrypt
- * @param {Buffer} key  128-bit encryption key (16 bytes)
+ * @param {Uint8Array} msg  Message to encrypt
+ * @param {Uint8Array} key  128-bit encryption key (16 bytes)
  * @param {string} [mode=ecb]  Block cipher mode of operation (currently only 'ecb' or 'cbc')
- * @param {Buffer} [iv]  Optional IV
+ * @param {Uint8Array} [iv]  Optional IV
  * @param {bool}   [skippad]  Skip PKCS#7 padding postprocessing
- * @returns {Buffer}
+ * @returns {Uint8Array}
  */
 function encrypt( msg, key, mode, ivbuf, skippad ) {
   return doBlocks( true, msg, key, mode, ivbuf, skippad );
@@ -197,12 +232,12 @@ function encrypt( msg, key, mode, ivbuf, skippad ) {
  * Decrypts data using XTEA cipher using specified block cipher mode of operation
  * and PKCS#7 padding.
  *
- * @param {Buffer} msg  Ciphertext to decrypt
- * @param {Buffer} key  128-bit encryption key (16 bytes)
+ * @param {Uint8Array} msg  Ciphertext to decrypt
+ * @param {Uint8Array} key  128-bit encryption key (16 bytes)
  * @param {string} [mode=ecb]  Block cipher mode of operation (currently only 'ecb' or 'cbc')
- * @param {Buffer} [iv]  Optional IV
+ * @param {Uint8Array} [iv]  Optional IV
  * @param {bool}   [skippad]  Skip PKCS#7 padding postprocessing
- * @returns {Buffer}
+ * @returns {Uint8Array}
  */
 function decrypt( msg, key, mode, ivbuf, skippad ) {
   return doBlocks( false, msg, key, mode, ivbuf, skippad );
