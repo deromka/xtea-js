@@ -4,15 +4,46 @@ var test = require("tape");
 function convert_string( s ) {
     let arrayBuffer = new ArrayBuffer(s.length * 1);
     let newUint = new Uint8Array(arrayBuffer);
-    newUint.forEach((_, i) => {
+    for (var i=0; i<newUint.length; i++ )  {
         newUint[i] = s.charCodeAt(i);
-    });
+    };
     return newUint;
 }
 
 function convert_hex_string( hexString ) {
     return new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
 }
+
+function uint32_to_uint8_big_endian( num ) {
+    var out = new Uint8Array(4);
+
+    // big endian
+    out[3] = 0xFF & num
+    out[2] = 0xFF & (num >> 8)
+    out[1] = 0xFF & (num >> 16)
+    out[0] = 0xFF & (num >> 24)
+
+    return out
+}
+
+function uint8_arr_to_uint32_big_endian( bytes ) {
+    var value = (bytes[3] & 0xFF) | ((bytes[2] & 0xFF) << 8)  | ((bytes[1] & 0xFF) << 16) | ((bytes[0] & 0xFF) << 24);
+    return value
+}
+
+test('conversions', function (t){
+    var num = 0xFF2345
+    var arr = uint32_to_uint8_big_endian(num)
+
+    const dv = new DataView(arr.buffer);
+    var res2 = dv.getUint32(0, false)
+
+    var res = uint8_arr_to_uint32_big_endian(arr)
+    t.deepEqual(num, res, "numbers should be equal")
+    t.deepEqual(res, res2, "numbers should be equal 1")
+
+    t.end()
+})
 
 test('XTEA ECB encryption', function (t) {
     var buf = new Uint8Array([1,2,3]);

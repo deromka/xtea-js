@@ -56,7 +56,7 @@ function decipher_cbc( v, k, iv ) {
 }
 
 function uint32_to_uint8_big_endian( num ) {
-  const out = new Uint8Array(4);
+  var out = new Uint8Array(4);
 
   // big endian
   out[3] = 0xFF & num
@@ -68,8 +68,19 @@ function uint32_to_uint8_big_endian( num ) {
 }
 
 function uint8_arr_to_uint32_big_endian( arr ) {
-  const dv = new DataView(arr);
-  return dv.getUint32(0, false)
+    var value = 0
+    if (arr) {
+      var bytes = new Uint8Array(arr)
+      var byte3 = (bytes[3] & 0xFF)
+      var byte2 = ((bytes[2] & 0xFF) << 8)
+      var byte1 = ((bytes[1] & 0xFF) << 16)
+      var byte0 = ((bytes[0] & 0xFF) << 24)
+      value = (byte3 | byte2 | byte1 | byte0) >>> 0;
+    }
+
+    //const dv = new DataView(arr);
+    //var value = dv.getUint32(0, false)
+    return value
 }
 
 function concat_arrays( a, b ) {
