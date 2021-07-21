@@ -14,6 +14,44 @@ function convert_hex_string( hexString ) {
     return new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
 }
 
+function toHex(buffer) {
+    return Array.prototype.map.call(buffer, x => x.toString(16).padStart(2, '0')).join('');
+}
+
+function Utf8ArrayToStr(array) {
+    var out, i, len, c;
+    var char2, char3;
+
+    out = "";
+    len = array.length;
+    i = 0;
+    while(i < len) {
+        c = array[i++];
+        switch(c >> 4)
+        {
+            case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7:
+            // 0xxxxxxx
+            out += String.fromCharCode(c);
+            break;
+            case 12: case 13:
+            // 110x xxxx   10xx xxxx
+            char2 = array[i++];
+            out += String.fromCharCode(((c & 0x1F) << 6) | (char2 & 0x3F));
+            break;
+            case 14:
+                // 1110 xxxx  10xx xxxx  10xx xxxx
+                char2 = array[i++];
+                char3 = array[i++];
+                out += String.fromCharCode(((c & 0x0F) << 12) |
+                    ((char2 & 0x3F) << 6) |
+                    ((char3 & 0x3F) << 0));
+                break;
+        }
+    }
+
+    return out;
+}
+
 function uint32_to_uint8_big_endian( num ) {
     var out = new Uint8Array(4);
 
@@ -86,6 +124,13 @@ test('XTEA CBC encryption', function (t) {
 
     enc = xtea.encrypt(convert_string("0000000000000000"), convert_string("super secret key"), "cbc", convert_string("iv_value"));
     t.deepEqual(enc, convert_hex_string("cbbee9bd7a6c267ad17f4720f3eb70f31707672103db54d5"), "test vector 3");
+
+    enc = xtea.encrypt(convert_string("0102030405060708"), convert_string("super secret key"), "cbc", convert_string("iv_value"));
+    var st = toHex(enc)
+    t.deepEqual(enc, convert_hex_string("348b4eafeca6a7740f9f11646636068c7e9df41e961eb220"), "test vector 3");
+
+    dec = xtea.decrypt(convert_hex_string("cbbee9bd7a6c267ad17f4720f3eb70f31707672103db54d5"), convert_string("super secret key"), "cbc", convert_string("iv_value"));
+    t.deepEqual(dec, convert_string("0000000000000000") , "decrypt");
     
     enc = xtea.encrypt(convert_string("0000000000000000"), convert_string("super secret key"), "cbc", convert_string("iv_value"), true);
     t.deepEqual(enc, convert_hex_string("cbbee9bd7a6c267ad17f4720f3eb70f3"), "test vector 4 (skipped padding)");

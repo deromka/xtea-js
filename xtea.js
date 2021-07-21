@@ -78,13 +78,45 @@ function uint8_arr_to_uint32_big_endian( arr ) {
       value = (byte3 | byte2 | byte1 | byte0) >>> 0;
     }
 
-    //const dv = new DataView(arr);
-    //var value = dv.getUint32(0, false)
     return value
 }
 
+function Utf8ArrayToStr(array) {
+  var out, i, len, c;
+  var char2, char3;
+
+  out = "";
+  len = array.length;
+  i = 0;
+  while(i < len) {
+    c = array[i++];
+    switch(c >> 4)
+    {
+      case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7:
+      // 0xxxxxxx
+      out += String.fromCharCode(c);
+      break;
+      case 12: case 13:
+      // 110x xxxx   10xx xxxx
+      char2 = array[i++];
+      out += String.fromCharCode(((c & 0x1F) << 6) | (char2 & 0x3F));
+      break;
+      case 14:
+        // 1110 xxxx  10xx xxxx  10xx xxxx
+        char2 = array[i++];
+        char3 = array[i++];
+        out += String.fromCharCode(((c & 0x0F) << 12) |
+            ((char2 & 0x3F) << 6) |
+            ((char3 & 0x3F) << 0));
+        break;
+    }
+  }
+
+  return out;
+}
+
 function concat_arrays( a, b ) {
-  const out = new Uint8Array( a.length + b.length )
+  var out = new Uint8Array( a.length + b.length )
   out.set(a)
   out.set(b, a.length)
 
@@ -120,6 +152,19 @@ function doBlock( method, block ,key ) {
 var MODES = {
   ecb: { encrypt: encipher, decrypt: decipher },
   cbc: { encrypt: encipher_cbc, decrypt: decipher_cbc }
+}
+
+function convert_string( s ) {
+  var arrayBuffer = new ArrayBuffer(s.length * 1);
+  var newUint = new Uint8Array(arrayBuffer);
+  for (var i=0; i<newUint.length; i++ )  {
+    newUint[i] = s.charCodeAt(i);
+  };
+  return newUint;
+}
+
+function convert_hex_string( hexString ) {
+  return new Uint8Array(hexString.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
 }
 
 /** @private */
